@@ -1,27 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.blue,
       ),
       home: const MyHomePage(title: 'Flutter Demo Home Page'),
@@ -32,15 +24,6 @@ class MyApp extends StatelessWidget {
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
   final String title;
 
   @override
@@ -48,68 +31,174 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  double _progress = 0;
+  late InAppWebViewController? _inAppWebViewController;
+  late TextEditingController _textEditingController;
+  final ValueNotifier<bool> _canGoBack = ValueNotifier(false);
+  final ValueNotifier<bool> _canGoForward = ValueNotifier(false);
+  final ValueNotifier<bool> _isLoading = ValueNotifier(false);
+  final ValueNotifier<Uri> _uri = ValueNotifier(Uri.parse('https://yandex.ru'));
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  InAppWebViewGroupOptions options = InAppWebViewGroupOptions(
+    ios: IOSInAppWebViewOptions(
+      allowsInlineMediaPlayback: true,
+    ),
+  );
+
+  @override
+  void initState() {
+    _textEditingController = TextEditingController();
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _textEditingController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Container(
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+          children: [
+            Container(
+              color: Colors.grey[200],
+              height: 70,
+              child: Row(
+                children: [
+                  ValueListenableBuilder(
+                    valueListenable: _canGoBack,
+                    builder: (context, value, child) {
+                      return GestureDetector(
+                        onTap: () {
+                          if (value) {
+                            _inAppWebViewController!.goBack();
+                          }
+                        },
+                        child: SizedBox(
+                          width: 40,
+                          child: Icon(
+                            Icons.arrow_back_ios,
+                            color: value ? Colors.black : Colors.grey,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder(
+                    valueListenable: _canGoForward,
+                    builder: (context, value, child) {
+                      return GestureDetector(
+                        onTap: () {
+                          if (value) {
+                            _inAppWebViewController!.goForward();
+                          }
+                        },
+                        child: SizedBox(
+                          width: 40,
+                          child: Icon(
+                            Icons.arrow_forward_ios,
+                            color: value ? Colors.black : Colors.grey,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder(
+                    valueListenable: _isLoading,
+                    builder: (context, value, child) {
+                      return GestureDetector(
+                        onTap: () {
+                          value
+                              ? _inAppWebViewController!.goBack()
+                              : _inAppWebViewController!.reload();
+                        },
+                        child: SizedBox(
+                          width: 40,
+                          child: value
+                              ? const Icon(Icons.cancel)
+                              : const Icon(Icons.refresh),
+                        ),
+                      );
+                    },
+                  ),
+                  SizedBox(
+                    width: 300,
+                    child: ValueListenableBuilder(
+                      valueListenable: _uri,
+                      builder: (context, uri, child) {
+                        return TextField(
+                          controller: _textEditingController,
+                          decoration: InputDecoration(
+                              border: const OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(15))),
+                              hintText: uri.toString(),
+                              fillColor: Colors.white,
+                              filled: true,
+                              contentPadding: const EdgeInsets.all(5)),
+                          onSubmitted: (value) async {
+                            _uri.value = Uri.parse(value);
+                            await _inAppWebViewController?.loadUrl(
+                              urlRequest: URLRequest(url: _uri.value),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Expanded(
+              child: Stack(
+                children: [
+                  InAppWebView(
+                    onWebViewCreated: (controller) {
+                      _inAppWebViewController = controller;
+                    },
+                    initialOptions: options,
+                    initialUrlRequest: URLRequest(
+                      url: Uri.parse('https://yandex.ru'),
+                    ),
+                    onLoadStart: (controller, url) async {
+                      _isLoading.value = true;
+                      _canGoBack.value = await controller.canGoBack();
+                      _canGoForward.value = await controller.canGoForward();
+                    },
+                    onLoadStop: (controller, url) {
+                      _isLoading.value = false;
+                    },
+                    onProgressChanged:
+                        (InAppWebViewController controller, int progress) {
+                      setState(() {
+                        _progress = progress / 100;
+                      });
+                    },
+                  ),
+                  _progress < 1
+                      ? SizedBox(
+                          height: 3,
+                          child: LinearProgressIndicator(
+                            value: _progress,
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .secondary
+                                .withOpacity(0.2),
+                          ),
+                        )
+                      : const SizedBox()
+                ],
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
